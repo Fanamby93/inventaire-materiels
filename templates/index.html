@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventaire Matériel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">Inventaire Matériel</h1>
+        
+        <!-- Statistiques -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title">Total</h5>
+                        <p class="card-text display-6">{{ stats.total }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title">En stock</h5>
+                        <p class="card-text display-6">{{ stats.en_stock }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-warning">
+                    <div class="card-body">
+                        <h5 class="card-title">Attribués</h5>
+                        <p class="card-text display-6">{{ stats.attribue }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <a href="{{ url_for('ajouter_type') }}" class="btn btn-outline-success mb-3">
+                    <i class="bi bi-plus-circle"></i> Ajouter un type de matériel
+                </a>
+
+                <div class="card text-white bg-info">
+                    <div class="card-body">
+                        <h5 class="card-title">Types</h5>
+                        <p class="card-text">
+                            Laptops: {{ stats.laptops }}<br>
+                            Téléphones: {{ stats.telephones }}<br>
+                            Box: {{ stats.box }}<br>
+                            SIM: {{ stats.sim }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="mb-3 d-flex justify-content-between">
+            <a href="{{ url_for('ajouter') }}" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Ajouter Matériel
+            </a>
+            <a href="{{ url_for('export_csv') }}" class="btn btn-secondary">
+                <i class="bi bi-download"></i> Exporter en CSV
+            </a>
+        </div>
+        
+        <!-- Filtres -->
+        <form method="get" action="{{ url_for('index') }}" class="mb-3">
+            <div class="input-group">
+                <label class="input-group-text" for="type">Filtrer par type</label>
+                <select class="form-select" name="type" id="type" onchange="this.form.submit()">
+                    <option value="">-- Tous les types --</option>
+                    {% for t in types %}
+                        <option value="{{ t }}" {% if t == type_filtre %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+
+        <!-- Tableau des matériels -->
+        <div class="card">
+            <div class="card-header">
+                <h4>Liste des matériels</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Type</th>
+                                <th>Marque</th>
+                                <th>Modèle</th>
+                                <th>Numéro de série</th>
+                                <th>Statut</th>
+                                <th>Attribué à</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for materiel in materiels %}
+                            <tr>
+                                <td>{{ materiel.id }}</td>
+                                <td>{{ materiel.type }}</td>
+                                <td>{{ materiel.marque if materiel.marque else "Non spécifié" }}</td>
+                                <td>{{ materiel.modele if materiel.modele else "Non spécifié" }}</td>
+                                <td>{{ materiel.numero_serie if materiel.numero_serie else "Non spécifié" }}</td>
+                                <td>
+                                    <span class="badge bg-{% if materiel.statut == 'En stock' %}success{% else %}warning{% endif %}">
+                                        {{ materiel.statut }}
+                                    </span>
+                                </td>
+                                <td>{{ materiel.attribue_a if materiel.attribue_a else '-' }}</td>
+                                <td>
+                                    {% if materiel.statut == 'En stock' %}
+                                        <a href="{{ url_for('attribuer', id=materiel.id) }}" class="btn btn-sm btn-primary" title="Attribuer">
+                                            <i class="bi bi-person-plus"></i>
+                                        </a>
+                                    {% else %}
+                                        <a href="{{ url_for('attribuer', id=materiel.id) }}" class="btn btn-sm btn-warning" title="Modifier attribution">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                        <a href="{{ url_for('retourner', id=materiel.id) }}" class="btn btn-sm btn-danger" title="Retourner">
+                                            <i class="bi bi-arrow-return-left"></i>
+                                        </a>
+                                    {% endif %}
+
+                                    <!-- ✅ Bouton vers historique -->
+                                    <a href="{{ url_for('historique', id=materiel.id) }}" class="btn btn-sm btn-info" title="Historique">
+                                        <i class="bi bi-clock-history"></i>
+                                    </a>
+
+                                    <a href="{{ url_for('supprimer', id=materiel.id) }}" class="btn btn-sm btn-outline-danger" 
+                                       title="Supprimer" 
+                                       onclick="return confirm('Êtes-vous sûr de vouloir supprimer ce matériel ?');">
+                                       <i class="bi bi-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show fixed-bottom m-3" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
