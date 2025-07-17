@@ -25,15 +25,12 @@
                     <td>{{ user.id }}</td>
                     <td>{{ user.username }}</td>
                     <td>
-                        {% if session.role == 'admin' %}
-<form action="{{ url_for('supprimer_utilisateur', id=user.id) }}" method="post" style="display:inline;" 
-      onsubmit="return confirm('Voulez-vous vraiment supprimer cet utilisateur ?');">
-    <button type="submit" class="btn btn-sm btn-danger" title="Supprimer utilisateur">
-        <i class="bi bi-trash"></i> Supprimer
-    </button>
-</form>
-{% endif %}
-
+                        <form action="{{ url_for('supprimer_utilisateur', id=user.id) }}" method="post" style="display:inline;" 
+                              onsubmit="return confirm('Voulez-vous vraiment supprimer cet utilisateur ?');">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Supprimer utilisateur">
+                                <i class="bi bi-trash"></i> Supprimer
+                            </button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

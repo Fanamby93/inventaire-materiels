@@ -129,16 +129,6 @@ def ajouter():
             flash(f'Erreur: {e}', 'danger')
     return render_template('ajouter.html')
 
-@app.route('/utilisateurs')
-def utilisateurs():
-    if 'logged_in' not in session:
-        return redirect(url_for('login'))
-
-    users = User.query.order_by(User.username).all()
-    return render_template('utilisateurs.html', users=users)
-
-
-
 @app.route('/attribuer/<int:id>', methods=['GET', 'POST'])
 def attribuer(id):
     if 'logged_in' not in session:
@@ -257,6 +247,32 @@ def ajouter_type():
 
     types = TypeMateriel.query.order_by(TypeMateriel.nom).all()
     return render_template("ajouter_type.html", types=types)
+
+@app.route('/utilisateurs')
+def utilisateurs():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
+    users = User.query.order_by(User.username).all()
+    return render_template('utilisateurs.html', users=users)
+
+@app.route('/supprimer_utilisateur/<int:id>', methods=['POST'])
+def supprimer_utilisateur(id):
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
+    user = User.query.get_or_404(id)
+
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        flash(f"Utilisateur '{user.username}' supprimé avec succès.", 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erreur lors de la suppression : {str(e)}", 'danger')
+
+    return redirect(url_for('utilisateurs'))
+
 
 @app.route('/historique/<int:id>')
 def historique(id):
