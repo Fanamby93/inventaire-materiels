@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from io import StringIO, BytesIO
 import csv
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'votre_cle_secrete_ici'
@@ -37,6 +38,17 @@ class Historique(db.Model):
     date_action = db.Column(db.String(20), nullable=False)
     details = db.Column(db.Text)
     utilisateur = db.Column(db.String(100))
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(200), nullable=False)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 # ------------------ BASE ------------------
 with app.app_context():
@@ -117,6 +129,16 @@ def ajouter():
             flash(f'Erreur: {e}', 'danger')
     return render_template('ajouter.html')
 
+@app.route('/utilisateurs')
+def utilisateurs():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
+    users = User.query.order_by(User.username).all()
+    return render_template('utilisateurs.html', users=users)
+
+
+
 @app.route('/attribuer/<int:id>', methods=['GET', 'POST'])
 def attribuer(id):
     if 'logged_in' not in session:
@@ -182,6 +204,26 @@ def retourner(id):
             db.session.rollback()
             flash(f'Erreur lors du retour: {e}', 'danger')
     return redirect(url_for('index'))
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        if User.query.filter_by(username=username).first():
+            flash('Nom d’utilisateur déjà utilisé', 'danger')
+            return redirect(url_for('signup'))
+
+        user = User(username=username)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        flash('Compte créé avec succès ! Vous pouvez vous connecter.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('signup.html')
+
 
 @app.route('/supprimer/<int:id>')
 def supprimer(id):
