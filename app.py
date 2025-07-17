@@ -1,18 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from io import StringIO, BytesIO
 import csv
 from datetime import datetime
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'votre_cle_secrete_ici'
+app.secret_key = 'votre_cle_secrete_ici'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///inventaire.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-
-
-# Modèles de base de données
+# ------------------ MODELES ------------------
 
 class TypeMateriel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -22,7 +20,7 @@ class Materiel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.String(50), nullable=False)
     marque = db.Column(db.String(50), nullable=False)
-    modele = db.Column(db.String(100)) # Champ non obligatoire
+    modele = db.Column(db.String(100))
     numero_serie = db.Column(db.String(100), unique=True)
     date_acquisition = db.Column(db.String(20))
     statut = db.Column(db.String(20), default='En stock')
@@ -40,11 +38,12 @@ class Historique(db.Model):
     details = db.Column(db.Text)
     utilisateur = db.Column(db.String(100))
 
-# Créer la base si elle n’existe pas
+# ------------------ BASE ------------------
 with app.app_context():
     db.create_all()
 
-# Statistiques
+# ------------------ UTIL ------------------
+
 def get_stats():
     return {
         'total': Materiel.query.count(),
@@ -56,26 +55,46 @@ def get_stats():
         'sim': Materiel.query.filter_by(type='SIM Flotte').count()
     }
 
+# ------------------ ROUTES ------------------
+
 @app.route('/')
 def index():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     type_filtre = request.args.get('type')
-    if type_filtre:
-        materiels = Materiel.query.filter_by(type=type_filtre).order_by(Materiel.modele).all()
-    else:
-        materiels = Materiel.query.order_by(Materiel.type).all()
-    
+    materiels = Materiel.query.filter_by(type=type_filtre).order_by(Materiel.modele).all() if type_filtre else Materiel.query.order_by(Materiel.type).all()
     types = [row[0] for row in db.session.query(Materiel.type).distinct().order_by(Materiel.type).all()]
     return render_template('index.html', materiels=materiels, stats=get_stats(), types=types, type_filtre=type_filtre)
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        if request.form['username'] == 'admin' and request.form['password'] == '1234':
+            session['logged_in'] = True
+            return redirect(url_for('index'))
+        else:
+            flash('Identifiants invalides')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash("Déconnexion réussie", "success")
+    return redirect(url_for('login'))
+
 @app.route('/ajouter', methods=['GET', 'POST'])
 def ajouter():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
         try:
             nouveau = Materiel(
-                type=request.form.get('type'),  # .get() au lieu de [] pour éviter KeyError
-            marque=request.form.get('marque', '').strip() or None,  # Convertit "" en None
-            modele=request.form.get('modele', '').strip() or None,
-                numero_serie=request.form.get('numero_serie').strip() or None,
+                type=request.form.get('type'),
+                marque=request.form.get('marque', '').strip() or None,
+                modele=request.form.get('modele', '').strip() or None,
+                numero_serie=request.form.get('numero_serie', '').strip() or None,
                 date_acquisition=request.form.get('date_acquisition', ''),
                 commentaires=request.form.get('commentaires', '')
             )
@@ -100,29 +119,28 @@ def ajouter():
 
 @app.route('/attribuer/<int:id>', methods=['GET', 'POST'])
 def attribuer(id):
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     materiel = Materiel.query.get_or_404(id)
     if request.method == 'POST':
         try:
-            matricule = request.form['matricule']
-            nom_personne = request.form['nom_personne']
-            service = request.form.get('service', '')
-            commentaires = request.form.get('commentaires', '')
-            attribue_a = f"{matricule} - {nom_personne}"
-            if service:
-                attribue_a += f" ({service})"
+            attribue_a = f"{request.form['matricule']} - {request.form['nom_personne']}"
+            if request.form.get('service'):
+                attribue_a += f" ({request.form['service']})"
 
             materiel.statut = 'Attribué'
             materiel.attribue_a = attribue_a
-            materiel.matricule = matricule
-            materiel.service = service
+            materiel.matricule = request.form['matricule']
+            materiel.service = request.form.get('service', '')
             materiel.date_attribution = request.form.get('date_attribution', datetime.now().strftime("%Y-%m-%d"))
-            materiel.commentaires = commentaires
+            materiel.commentaires = request.form.get('commentaires', '')
 
             hist = Historique(
                 materiel_id=materiel.id,
                 action='Attribution',
                 date_action=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                details=f"Attribué à {attribue_a}. Commentaire: {commentaires}",
+                details=f"Attribué à {attribue_a}. Commentaire: {materiel.commentaires}",
                 utilisateur="Admin"
             )
             db.session.add(hist)
@@ -131,12 +149,15 @@ def attribuer(id):
             return redirect(url_for('index'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Erreur lors de l\'attribution: {e}', 'danger')
-    date_aujourdhui = datetime.now().strftime("%Y-%m-%d")
-    return render_template('attribuer.html', materiel=materiel, date_aujourdhui=date_aujourdhui)
+            flash(f'Erreur: {e}', 'danger')
+
+    return render_template('attribuer.html', materiel=materiel, date_aujourdhui=datetime.now().strftime("%Y-%m-%d"))
 
 @app.route('/retourner/<int:id>')
 def retourner(id):
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     materiel = Materiel.query.get_or_404(id)
     if materiel.statut == 'Attribué':
         try:
@@ -164,6 +185,9 @@ def retourner(id):
 
 @app.route('/supprimer/<int:id>')
 def supprimer(id):
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     materiel = Materiel.query.get_or_404(id)
     try:
         Historique.query.filter_by(materiel_id=id).delete()
@@ -174,72 +198,66 @@ def supprimer(id):
         db.session.rollback()
         flash(f'Erreur: {e}', 'danger')
     return redirect(url_for('index'))
-    
+
 @app.route("/ajouter-type", methods=["GET", "POST"])
 def ajouter_type():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     if request.method == "POST":
         nom = request.form.get("nom")
         if nom:
-            existant = TypeMateriel.query.filter_by(nom=nom).first()
-            if not existant:
-                nouveau_type = TypeMateriel(nom=nom)
-                db.session.add(nouveau_type)
+            if not TypeMateriel.query.filter_by(nom=nom).first():
+                db.session.add(TypeMateriel(nom=nom))
                 db.session.commit()
+                flash("Type ajouté", "success")
         return redirect(url_for("ajouter_type"))
 
     types = TypeMateriel.query.order_by(TypeMateriel.nom).all()
     return render_template("ajouter_type.html", types=types)
 
-
-
 @app.route('/historique/<int:id>')
 def historique(id):
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     materiel = Materiel.query.get_or_404(id)
     historiques = Historique.query.filter_by(materiel_id=id).order_by(Historique.date_action.desc()).all()
     return render_template('historique.html', materiel=materiel, historiques=historiques, datetime=datetime)
 
 @app.route('/export_csv')
 def export_csv():
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
     try:
-        # Étape 1 : Préparation des données en mémoire texte
         output_text = StringIO()
         writer = csv.writer(output_text, delimiter=';')
-        
-        # En-tête avec noms de colonnes
-        writer.writerow([
-            'ID', 'Type', 'Marque', 'Modèle', 'Numéro de série', 'Statut',
-            'Matricule', 'Attribué à', 'Service', 'Date attribution', 'Commentaires'
-        ])
-        
-        # Données
-        materiels = Materiel.query.all()
-        for m in materiels:
+        writer.writerow(['ID', 'Type', 'Marque', 'Modèle', 'Numéro de série', 'Statut', 'Matricule', 'Attribué à', 'Service', 'Date attribution', 'Commentaires'])
+
+        for m in Materiel.query.all():
             writer.writerow([
                 m.id, m.type, m.marque, m.modele, m.numero_serie, m.statut,
-                m.matricule or '',
-                m.attribue_a or '',
-                m.service or '',
-                m.date_attribution or '',
-                m.commentaires or ''
+                m.matricule or '', m.attribue_a or '', m.service or '',
+                m.date_attribution or '', m.commentaires or ''
             ])
-        
-        # Étape 2 : Conversion en binaire avec BOM UTF-8
+
         output = BytesIO()
-        output.write(b'\xef\xbb\xbf')  # BOM UTF-8 (équivalent de '\ufeff'.encode('utf-8'))
+        output.write(b'\xef\xbb\xbf')
         output.write(output_text.getvalue().encode('utf-8'))
         output.seek(0)
-        
-        # Étape 3 : Envoi du fichier
+
         return send_file(
             output,
             mimetype='text/csv; charset=utf-8',
             as_attachment=True,
             download_name=f'inventaire_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
         )
-        
     except Exception as e:
         flash(f"Erreur lors de l'export : {str(e)}", 'danger')
         return redirect(url_for('index'))
+
+# ------------------ DEMARRAGE ------------------
 
 if __name__ == '__main__':
     app.run(debug=True)
