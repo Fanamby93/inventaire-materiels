@@ -50,6 +50,8 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+        
+
 # ------------------ BASE ------------------
 with app.app_context():
     db.create_all()
@@ -82,18 +84,28 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['username'] == 'admin' and request.form['password'] == '1234':
+        username = request.form['username']
+        password = request.form['password']
+
+        # Cas spécial admin par défaut
+        if username == 'admin' and password == '1234':
             session['logged_in'] = True
+            session['username'] = 'admin'
+            return redirect(url_for('index'))
+
+        # Vérification des utilisateurs de la base
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            session['logged_in'] = True
+            session['username'] = user.username
             return redirect(url_for('index'))
         else:
-            flash('Identifiants invalides')
+            flash('Identifiants invalides', 'danger')
+
     return render_template('login.html')
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash("Déconnexion réussie", "success")
-    return redirect(url_for('login'))
+
+
 
 @app.route('/ajouter', methods=['GET', 'POST'])
 def ajouter():
@@ -247,6 +259,13 @@ def ajouter_type():
 
     types = TypeMateriel.query.order_by(TypeMateriel.nom).all()
     return render_template("ajouter_type.html", types=types)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash("Déconnexion réussie", "success")
+    return redirect(url_for('login'))
+
 
 @app.route('/utilisateurs')
 def utilisateurs():

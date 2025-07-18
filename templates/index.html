@@ -11,13 +11,20 @@
 <body>
     <nav class="navbar navbar-light bg-light justify-content-end px-4 py-2">
     <span class="me-auto fw-bold">Bienvenue dans l’inventaire</span>
+
     <a href="{{ url_for('utilisateurs') }}" class="btn btn-primary me-2">
         <i class="bi bi-people"></i> Voir les utilisateurs
     </a>
+
+    {% if session['username'] %}
+        <span class="text-muted me-3">Connecté : {{ session['username'] }}</span>
+    {% endif %}
+
     <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
         <i class="bi bi-box-arrow-right"></i> Déconnexion
     </a>
 </nav>
+
     <div class="container mt-4">
         <h1 class="text-center mb-4">Inventaire Matériel</h1>
         
